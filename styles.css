@@ -1,7 +1,7 @@
 /* Airy dark glass design inspired by the provided logos (green/blue/orange) */
 :root{
-  --bg0:#06101b;
-  --bg1:#071627;
+  --bg0:#0b2236;
+  --bg1:#0b2a40;
   --panel: rgba(255,255,255,.06);
   --line: rgba(255,255,255,.10);
   --text:#ecf3ff;
@@ -26,7 +26,7 @@ body{
   background: radial-gradient(1200px 600px at 15% 10%, rgba(91,211,111,.18), transparent 55%),
               radial-gradient(900px 500px at 75% 0%, rgba(73,169,255,.22), transparent 55%),
               radial-gradient(800px 600px at 95% 45%, rgba(255,181,74,.18), transparent 55%),
-              linear-gradient(180deg, var(--bg0), var(--bg1));
+              linear-gradient(180deg, var(--bg0), var(--bg1)), var(--bg1));
   overflow-x:hidden;
 }
 
@@ -46,7 +46,7 @@ body{
   display:flex; gap:16px; align-items:center; justify-content:space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--line);
-  background: rgba(5,14,24,.72);
+  background: linear-gradient(90deg, rgba(91,211,111,.20), rgba(73,169,255,.20), rgba(255,181,74,.18));
   backdrop-filter: blur(12px);
 }
 
@@ -55,7 +55,7 @@ body{
   width: 210px;
   height: 46px;
   object-fit: contain; /* mostra as 3 bandeiras inteiras */
-  background: rgba(255,255,255,.92);
+  background: rgba(255,255,255,.10);
   padding: 6px 10px;
   border-radius: 14px;
   box-shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -71,7 +71,7 @@ body{
   padding: 10px 12px;
   border-radius: 14px;
   color: #041018;
-  background: linear-gradient(135deg, var(--blue), var(--green), var(--orange));
+  background: linear-gradient(135deg, rgba(73,169,255,1), rgba(91,211,111,1), rgba(255,181,74,1));
   font-weight: 800;
   cursor:pointer;
   box-shadow: 0 12px 26px rgba(0,0,0,.35);
@@ -81,9 +81,9 @@ body{
 .btn:hover{transform: translateY(-1px); filter: brightness(1.03)}
 .btn:active{transform: translateY(0px); filter: brightness(.98)}
 .btn--ghost{
-  background: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.10);
   color: var(--text);
-  border: 1px solid rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.16);
   box-shadow: none;
   font-weight: 700;
 }
@@ -95,10 +95,10 @@ body{
 @media (max-width: 560px){ .grid{grid-template-columns: 1fr} .actions{flex-wrap:wrap; justify-content:flex-end}}
 
 .card{
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.16);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: 0 16px 40px rgba(0,0,0,.30);
   padding: 14px;
 }
 .card--warning{
@@ -124,8 +124,8 @@ body{
   display:inline-flex; align-items:center; gap:8px;
   padding: 8px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.10);
   font-weight: 800;
 }
 .pill--up{border-color: rgba(91,211,111,.30); background: rgba(91,211,111,.10)}
@@ -145,7 +145,7 @@ body{
 .field input, .field select{
   padding: 10px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.16);
   background: rgba(0,0,0,.20);
   color: var(--text);
   outline:none;
@@ -160,7 +160,7 @@ body{
 .table{width:100%; border-collapse: collapse; min-width: 920px; background: rgba(0,0,0,.10)}
 .table thead th{
   position:sticky; top:0;
-  background: rgba(6,16,27,.92);
+  background: linear-gradient(90deg, rgba(73,169,255,.25), rgba(91,211,111,.22), rgba(255,181,74,.22));
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255,255,255,.10);
   padding: 10px;
@@ -183,7 +183,7 @@ body{
   padding: 6px 10px;
   border-radius: 999px;
   border:1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
+  background: rgba(255,255,255,.10);
   font-weight: 800;
 }
 .badge--up{border-color: rgba(91,211,111,.30); background: rgba(91,211,111,.12)}
