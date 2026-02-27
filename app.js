@@ -295,7 +295,7 @@ function renderEmpty() {
 }
 
 async function loadHistoryForCharts() {
-  const qh = query(ref(db, "snapshots")("ts"), limitToLast(30));
+  const qh = query(ref(db, "snapshots"), limitToLast(30));
   const snap = await get(qh);
   const items = [];
   if (snap.exists()) {
@@ -323,7 +323,7 @@ async function loadHistoryForCharts() {
 
 async function loadLastTwoSnapshots() {
   showStatus("Lendo snapshots do Firebase…");
-  const q2 = query(ref(db, "snapshots")("ts"), limitToLast(2));
+  const q2 = query(ref(db, "snapshots"), limitToLast(2));
   const snap = await get(q2);
 
   if (!snap.exists()) {
