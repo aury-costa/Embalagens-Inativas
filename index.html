@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Painel • Embalagens Inativas</title>
+  <link rel="icon" href="assets/logo.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-blur"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand__logo" src="assets/logo.jpg" alt="Logos" />
+      <div class="brand__meta">
+        <div class="brand__title">Painel de Embalagens Inativas</div>
+        <div class="brand__subtitle">Acompanhe aumentos/quedas por loja, valor parado e evolução</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <label class="btn btn--ghost">
+        <input id="fileInput" type="file" accept=".xlsx,.xls" hidden />
+        📥 Importar XLSX
+      </label>
+      <button id="btnRefresh" class="btn btn--ghost" title="Recarregar último snapshot salvo no Firebase">🔄 Recarregar</button>
+      <button id="btnPDF" class="btn">🧾 Salvar PDF</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card card--warning" id="statusCard" style="display:none;">
+      <div class="card__title">Status</div>
+      <div class="status" id="statusText">Carregando…</div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <div class="card__title">Valor parado (R$)</div>
+        <div class="kpi" id="kpiValue">—</div>
+        <div class="hint" id="kpiValueHint">Somatório do Valor Custo Bruto no último arquivo</div>
+      </div>
+      <div class="card">
+        <div class="card__title">Estoque total</div>
+        <div class="kpi" id="kpiQty">—</div>
+        <div class="hint" id="kpiQtyHint">Somatório de Quantidade em Estoque</div>
+      </div>
+      <div class="card">
+        <div class="card__title">Pendências (Ped. Compra)</div>
+        <div class="kpi" id="kpiPending">—</div>
+        <div class="hint">Somatório de Qtd. Pend. Ped.Compra</div>
+      </div>
+      <div class="card">
+        <div class="card__title">Movimentação (vs snapshot anterior)</div>
+        <div class="kpi kpi--split">
+          <span class="pill pill--up" id="kpiUp">⬆️ 0</span>
+          <span class="pill pill--down" id="kpiDown">⬇️ 0</span>
+          <span class="pill pill--same" id="kpiSame">➡️ 0</span>
+        </div>
+        <div class="hint">Lojas com aumento, queda e estabilidade</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <div class="toolbar__left">
+          <div class="field">
+            <label>Buscar loja</label>
+            <input id="searchInput" type="text" placeholder="Ex: 001-AFL" />
+          </div>
+          <div class="field">
+            <label>Ordenar por</label>
+            <select id="sortSelect">
+              <option value="deltaDesc">Variação (maior ↑)</option>
+              <option value="deltaAsc">Variação (maior ↓)</option>
+              <option value="valueDesc">Valor parado (maior)</option>
+              <option value="qtyDesc">Estoque (maior)</option>
+              <option value="diasDesc">Dias última entrada (maior)</option>
+              <option value="nameAsc">Loja (A→Z)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Filtro</label>
+            <select id="filterSelect">
+              <option value="all">Todos</option>
+              <option value="up">Só aumentou ⬆️</option>
+              <option value="down">Só diminuiu ⬇️</option>
+              <option value="same">Só manteve ➡️</option>
+              <option value="pending">Com pendência</option>
+              <option value="stale">Sem entrada (>= 30 dias)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="toolbar__right">
+          <div class="meta">
+            <div class="meta__label">Snapshot atual</div>
+            <div class="meta__value" id="metaNow">—</div>
+          </div>
+          <div class="meta">
+            <div class="meta__label">Snapshot anterior</div>
+            <div class="meta__value" id="metaPrev">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" id="dataTable">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th class="num">Estoque</th>
+              <th class="num">Δ</th>
+              <th>Trend</th>
+              <th class="num">SKUs</th>
+              <th class="num">Pend.</th>
+              <th class="num">Dias últ. entrada</th>
+              <th class="num">Valor parado</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="8" class="muted">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="footnote">
+        Dica: Importe o XLSX atualizado todo dia/semana. O sistema salva no Firebase e compara com o snapshot anterior automaticamente.
+      </div>
+    </section>
+
+    <section class="grid grid--2">
+      <div class="card">
+        <div class="card__title">Evolução do valor parado (R$)</div>
+        <canvas id="chartValue"></canvas>
+        <div class="hint">Últimos snapshots salvos</div>
+      </div>
+      <div class="card">
+        <div class="card__title">Evolução do estoque total</div>
+        <canvas id="chartQty"></canvas>
+        <div class="hint">Últimos snapshots salvos</div>
+      </div>
+    </section>
+
+    <section class="grid grid--2">
+      <div class="card">
+        <div class="card__title">Top 10 lojas por valor parado</div>
+        <canvas id="chartTopValue"></canvas>
+      </div>
+      <div class="card">
+        <div class="card__title">Top 10 lojas por aumento de estoque</div>
+        <canvas id="chartTopUp"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>🔐 Dados salvos no Firebase Realtime Database • Arquivo de exemplo em <span class="mono">assets/Embalagens_inativas_exemplo.xlsx</span></div>
+  </footer>
+
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
