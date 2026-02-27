@@ -52,10 +52,14 @@ body{
 
 .brand{display:flex; gap:14px; align-items:center; min-width: 280px}
 .brand__logo{
-  width: 78px; height: 42px; object-fit:cover;
-  border-radius: 12px;
+  width: 210px;
+  height: 46px;
+  object-fit: contain; /* mostra as 3 bandeiras inteiras */
+  background: rgba(255,255,255,.92);
+  padding: 6px 10px;
+  border-radius: 14px;
   box-shadow: 0 10px 30px rgba(0,0,0,.35);
-  border: 1px solid rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.16);
 }
 .brand__title{font-weight:800; letter-spacing:-.02em; font-size:16px}
 .brand__subtitle{color: var(--muted); font-size: 12px; margin-top:2px}
@@ -67,7 +71,7 @@ body{
   padding: 10px 12px;
   border-radius: 14px;
   color: #041018;
-  background: linear-gradient(135deg, var(--blue), var(--green));
+  background: linear-gradient(135deg, var(--blue), var(--green), var(--orange));
   font-weight: 800;
   cursor:pointer;
   box-shadow: 0 12px 26px rgba(0,0,0,.35);
@@ -192,4 +196,12 @@ body{
   padding: 14px 16px;
   text-align:center;
   color: rgba(236,243,255,.70);
+}
+
+.card{ position: relative; overflow:hidden; }
+.card::before{
+  content:"";
+  position:absolute; left:0; top:0; right:0; height:3px;
+  background: linear-gradient(90deg, rgba(91,211,111,.95), rgba(73,169,255,.95), rgba(255,181,74,.95));
+  opacity:.9;
 }

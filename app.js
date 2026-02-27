@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
 import {
-  getDatabase, ref, push, set, get, query, orderByChild, limitToLast
+  getDatabase, ref, push, set, get, query, limitToLast
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -294,7 +294,7 @@ function renderEmpty() {
 }
 
 async function loadHistoryForCharts() {
-  const qh = query(ref(db, "snapshots"), orderByChild("ts"), limitToLast(30));
+  const qh = query(ref(db, "snapshots")("ts"), limitToLast(30));
   const snap = await get(qh);
   const items = [];
   if (snap.exists()) {
@@ -322,7 +322,7 @@ async function loadHistoryForCharts() {
 
 async function loadLastTwoSnapshots() {
   showStatus("Lendo snapshots do Firebase…");
-  const q2 = query(ref(db, "snapshots"), orderByChild("ts"), limitToLast(2));
+  const q2 = query(ref(db, "snapshots")("ts"), limitToLast(2));
   const snap = await get(q2);
 
   if (!snap.exists()) {

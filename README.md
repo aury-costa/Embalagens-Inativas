@@ -47,3 +47,7 @@ Depois você pode travar com autenticação/usuários.
 
 ## Arquivo de exemplo
 `assets/Embalagens_inativas_exemplo.xlsx`
+
+
+## Correção do erro ".indexOn"
+Este app **não usa mais** `orderByChild("ts")` nas consultas, então **não precisa** configurar `.indexOn` nas regras.
