@@ -103,6 +103,7 @@
       </div>
 
       <div class="note">
+        • Sinalização: <span class="badge badge--return">VOLTOU</span> = estava zerada e voltou a ter estoque no último snapshot.<br/>
         • Cabeçalho usa a data da importação.<br/>
         • Loja ausente no XLSX = 0 (verde) e vai para o final.<br/>
         • Clique em uma loja para ver os produtos (do último snapshot).
@@ -133,6 +134,34 @@
         <div class="pill pill--small">
           <div class="pill__k">Últ. entrada (mais próxima)</div>
           <div class="pill__v" id="prodMinDias">—</div>
+        </div>
+      </div>
+
+      <div class="prodTools">
+        <div class="field field--compact">
+          <label>Buscar produto</label>
+          <input id="prodSearch" type="text" placeholder="Ex: SACOLA, 37111, etc." />
+        </div>
+        <div class="field field--compact">
+          <label>Ordenar por</label>
+          <select id="prodSort">
+            <option value="valorDesc" selected>Valor (maior)</option>
+            <option value="qtyDesc">Qtd (maior)</option>
+            <option value="diasAsc">Dias (menor)</option>
+            <option value="nomeAsc">Produto (A→Z)</option>
+          </select>
+        </div>
+        <div class="field field--compact">
+          <label>Filtro</label>
+          <select id="prodFilter">
+            <option value="all" selected>Todos</option>
+            <option value="nonzero">Somente Qtd &gt; 0</option>
+            <option value="pend">Somente Pend. &gt; 0</option>
+          </select>
+        </div>
+        <div class="pill pill--small prodCount">
+          <div class="pill__k">Itens (filtrado)</div>
+          <div class="pill__v" id="prodCount">—</div>
         </div>
       </div>
 

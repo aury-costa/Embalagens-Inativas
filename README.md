@@ -19,3 +19,7 @@ Colunas:
 ## Firebase
 - /stores
 - /snapshots
+
+## v1.2+ (ajustes finos)
+- Modal de produtos: **buscar / filtrar / ordenar** + contador de itens
+- Alerta visual: badge **VOLTOU** quando a loja estava zerada e voltou a ter estoque no último snapshot

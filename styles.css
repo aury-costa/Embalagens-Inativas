@@ -105,3 +105,45 @@ td.qtyCell{width:92px;min-width:92px;text-align:right}
 .prodTable thead th{position:sticky;top:0;background:rgba(255,255,255,.96);border-bottom:1px solid rgba(14,30,46,.10);padding:10px 8px;font-size:12px;text-align:left;white-space:nowrap}
 .prodTable tbody td{border-bottom:1px solid rgba(14,30,46,.06);padding:8px 8px;font-size:13px}
 .prodTable .num{text-align:right;font-variant-numeric:tabular-nums}
+
+
+/* Produtos: filtros/ordenação no modal */
+.prodTools{
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.field--compact{min-width:220px}
+.prodCount{min-width:170px}
+
+/* Badge de alerta (loja voltou a ter estoque) */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:20px;
+  padding:0 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.02em;
+  border:1px solid rgba(14,30,46,.14);
+  background:rgba(255,255,255,.70);
+  color:rgba(11,26,43,.82);
+}
+.badge--return{
+  background:rgba(255,176,46,.22);
+  border-color:rgba(255,176,46,.35);
+}
+
+/* Deixa o badge bem colado no nome da loja */
+.storeCell .storeWrap{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.storeCell .storeName{
+  display:inline-block;
+}

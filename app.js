@@ -53,6 +53,10 @@ const els = {
   prodTitle: document.getElementById("prodTitle"),
   prodSub: document.getElementById("prodSub"),
   prodBody: document.getElementById("prodBody"),
+  prodSearch: document.getElementById("prodSearch"),
+  prodSort: document.getElementById("prodSort"),
+  prodFilter: document.getElementById("prodFilter"),
+  prodCount: document.getElementById("prodCount"),
   prodTotQty: document.getElementById("prodTotQty"),
   prodTotVal: document.getElementById("prodTotVal"),
   prodTotPend: document.getElementById("prodTotPend"),
@@ -63,6 +67,8 @@ const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BR
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
 let currentProdStore = null;
+let currentProdItems = [];
+
 
 let state = {
   stores: [],
@@ -229,6 +235,7 @@ function applyFilters(stores, last, prev) {
   if (filt==="zero") out = out.filter(s=> getQty(last,s) === 0);
   if (filt==="up" && prev) out = out.filter(s=> (getQty(last,s)-getQty(prev,s)) > 0);
   if (filt==="down" && prev) out = out.filter(s=> (getQty(last,s)-getQty(prev,s)) < 0);
+  if (filt==="return" && prev) out = out.filter(s=> (getQty(prev,s)===0) && (getQty(last,s)>0));
   return out;
 }
 
@@ -268,7 +275,9 @@ function renderTable() {
   const body = storesSorted.map(store => {
     const isZero = getQty(last, store) === 0;
     let tr = `<tr class="${isZero ? "zeroRow" : ""}">`;
-    tr += `<td class="storeCell" data-store="${escapeHtml(store)}">${escapeHtml(store)}</td>`;
+    const returned = !!(prev && (getQty(prev, store) === 0) && (getQty(last, store) > 0));
+    const badge = returned ? `<span class="badge badge--return" title="Estava zerada e voltou a ter estoque no último snapshot">VOLTOU</span>` : "";
+    tr += `<td class="storeCell" data-store="${escapeHtml(store)}"><span class="storeWrap"><span class="storeName">${escapeHtml(store)}</span>${badge}</span></td>`;
 
     for (let i=0;i<state.visible.length;i++) {
       const snap = state.visible[i];
@@ -376,6 +385,7 @@ function openProductsModal(store) {
   if (!last) return;
 
   const prods = last.products?.[store] || [];
+  currentProdItems = Array.isArray(prods) ? prods : [];
   const totQty = getQty(last, store);
   const totVal = getValor(last, store);
   const totPend = getPend(last, store);
@@ -388,30 +398,67 @@ function openProductsModal(store) {
   els.prodTotPend.textContent = fmtInt.format(totPend);
   els.prodMinDias.textContent = (minDias === null || minDias === undefined) ? "—" : fmtInt.format(minDias);
 
-  if (!prods.length) {
-    els.prodBody.innerHTML = "<tr><td colspan='6' style='padding:10px;color:rgba(11,26,43,.65)'>Sem produtos para esta loja no último snapshot.</td></tr>";
-  } else {
-    els.prodBody.innerHTML = prods.map(p => {
-      const cod = escapeHtml(p.codigoProduto || "");
-      const nome = escapeHtml(p.produto || "");
-      const qty = fmtInt.format(p.qty || 0);
-      const pend = fmtInt.format(p.pending || 0);
-      const dias = (p.dias === null || p.dias === undefined) ? "—" : fmtInt.format(p.dias);
-      const val = fmtBRL.format(p.valor || 0);
-      return `<tr>
-        <td class="num">${cod}</td>
-        <td>${nome}</td>
-        <td class="num">${qty}</td>
-        <td class="num">${pend}</td>
-        <td class="num">${dias}</td>
-        <td class="num">${val}</td>
-      </tr>`;
-    }).join("");
-  }
+  // Reset ferramentas do modal
+  if (els.prodSearch) els.prodSearch.value = "";
+  if (els.prodSort) els.prodSort.value = "valorDesc";
+  if (els.prodFilter) els.prodFilter.value = "all";
+
+  renderProductsModalList();
 
   els.prodModal.style.display = "block";
 }
 function closeProductsModal() { els.prodModal.style.display = "none"; }
+
+
+function renderProductsModalList() {
+  const q = (els.prodSearch?.value || "").trim().toLowerCase();
+  const sortMode = els.prodSort?.value || "valorDesc";
+  const filt = els.prodFilter?.value || "all";
+
+  let items = Array.isArray(currentProdItems) ? [...currentProdItems] : [];
+
+  if (q) {
+    items = items.filter(p => {
+      const cod = String(p.codigoProduto || "").toLowerCase();
+      const nome = String(p.produto || "").toLowerCase();
+      return cod.includes(q) || nome.includes(q);
+    });
+  }
+
+  if (filt === "nonzero") items = items.filter(p => (p.qty || 0) > 0);
+  if (filt === "pend") items = items.filter(p => (p.pending || 0) > 0);
+
+  items.sort((a,b) => {
+    if (sortMode === "qtyDesc") return (b.qty||0) - (a.qty||0);
+    if (sortMode === "diasAsc") return ((a.dias ?? 999999) - (b.dias ?? 999999));
+    if (sortMode === "nomeAsc") return String(a.produto||"").localeCompare(String(b.produto||""), "pt-BR");
+    return (b.valor||0) - (a.valor||0); // valorDesc
+  });
+
+  if (els.prodCount) els.prodCount.textContent = String(items.length);
+
+  if (!items.length) {
+    els.prodBody.innerHTML = "<tr><td colspan='6' style='padding:10px;color:rgba(11,26,43,.65)'>Nenhum item no filtro.</td></tr>";
+    return;
+  }
+
+  els.prodBody.innerHTML = items.map(p => {
+    const cod = escapeHtml(p.codigoProduto || "");
+    const nome = escapeHtml(p.produto || "");
+    const qty = fmtInt.format(p.qty || 0);
+    const pend = fmtInt.format(p.pending || 0);
+    const dias = (p.dias === null || p.dias === undefined || Number.isNaN(p.dias)) ? "—" : fmtInt.format(p.dias);
+    const val = fmtBRL.format(p.valor || 0);
+    return `<tr>
+      <td class="num">${cod}</td>
+      <td>${nome}</td>
+      <td class="num">${qty}</td>
+      <td class="num">${pend}</td>
+      <td class="num">${dias}</td>
+      <td class="num">${val}</td>
+    </tr>`;
+  }).join("");
+}
 
 // ===== PDF helpers =====
 function drawArrow(doc, kind, x, y, size) {
@@ -432,6 +479,7 @@ function buildStorePDF(store) {
   const last = state.visible[state.visible.length-1] || null;
   if (!last) { alert("Sem dados. Importe um XLSX primeiro."); return; }
   const prods = last.products?.[store] || [];
+  currentProdItems = Array.isArray(prods) ? prods : [];
 
   const totQty = getQty(last, store);
   const totVal = getValor(last, store);
@@ -613,6 +661,9 @@ function wire() {
 
   els.prodBackdrop.addEventListener("click", closeProductsModal);
   els.btnProdClose.addEventListener("click", closeProductsModal);
+  if (els.prodSearch) els.prodSearch.addEventListener("input", renderProductsModalList);
+  if (els.prodSort) els.prodSort.addEventListener("change", renderProductsModalList);
+  if (els.prodFilter) els.prodFilter.addEventListener("change", renderProductsModalList);
   els.btnProdPDF.addEventListener("click", () => {
     if (!currentProdStore) { alert("Abra uma loja primeiro."); return; }
     buildStorePDF(currentProdStore);
