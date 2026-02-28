@@ -39,7 +39,6 @@ const els = {
   lastValue: document.getElementById("lastValue"),
   lastZero: document.getElementById("lastZero"),
 
-  // store modal
   storeModal: document.getElementById("storeModal"),
   storeBackdrop: document.getElementById("storeBackdrop"),
   storeInput: document.getElementById("storeInput"),
@@ -47,10 +46,10 @@ const els = {
   btnSaveStore: document.getElementById("btnSaveStore"),
   modalHint: document.getElementById("modalHint"),
 
-  // products modal
   prodModal: document.getElementById("prodModal"),
   prodBackdrop: document.getElementById("prodBackdrop"),
   btnProdClose: document.getElementById("btnProdClose"),
+  btnProdPDF: document.getElementById("btnProdPDF"),
   prodTitle: document.getElementById("prodTitle"),
   prodSub: document.getElementById("prodSub"),
   prodBody: document.getElementById("prodBody"),
@@ -63,14 +62,16 @@ const els = {
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
+let currentProdStore = null;
+
 let state = {
   stores: [],
   snapshots: [],
   visible: [],
 };
 
-function showStatus(msg) { els.statusCard.style.display = "block"; els.statusText.textContent = msg; }
-function hideStatus() { els.statusCard.style.display = "none"; }
+function showStatus(msg) { els.statusCard.style.display="block"; els.statusText.textContent = msg; }
+function hideStatus() { els.statusCard.style.display="none"; }
 function normalize(s) { return String(s ?? "").trim(); }
 function encodeKey(s) { return s.replace(/[.#$\[\]]/g, "_"); }
 
@@ -115,7 +116,7 @@ function parseXLSX(arrayBuffer) {
     if (!productsByStore[store]) productsByStore[store] = [];
     productsByStore[store].push(item);
 
-    if (!storesAgg[store]) storesAgg[store] = { qty: 0, valor: 0, pending: 0, skus: 0, minDias: null };
+    if (!storesAgg[store]) storesAgg[store] = { qty:0, valor:0, pending:0, skus:0, minDias: null };
     storesAgg[store].qty += item.qty;
     storesAgg[store].valor += item.valor;
     storesAgg[store].pending += item.pending;
@@ -127,8 +128,9 @@ function parseXLSX(arrayBuffer) {
   }
 
   for (const st of Object.keys(productsByStore)) {
-    productsByStore[st].sort((a, b) => (b.qty || 0) - (a.qty || 0));
+    productsByStore[st].sort((a,b)=> (b.qty||0)-(a.qty||0));
   }
+
   return { storesAgg, productsByStore };
 }
 
@@ -136,7 +138,7 @@ async function loadStores() {
   const snap = await get(ref(db, "stores"));
   if (!snap.exists()) { state.stores = []; return; }
   const v = snap.val();
-  state.stores = Object.keys(v).sort((a, b) => a.localeCompare(b));
+  state.stores = Object.keys(v).sort((a,b)=>a.localeCompare(b));
 }
 
 async function loadSnapshots() {
@@ -155,7 +157,7 @@ async function loadSnapshots() {
       totals: v.totals || {},
     });
   });
-  items.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  items.sort((a,b)=> (a.ts||0)-(b.ts||0));
   state.snapshots = items;
 }
 
@@ -167,7 +169,7 @@ function buildVisible() {
 function getAllStoresUnion() {
   const setAll = new Set(state.stores);
   for (const s of state.visible) for (const k of Object.keys(s.stores || {})) setAll.add(k);
-  return Array.from(setAll).sort((a, b) => a.localeCompare(b));
+  return Array.from(setAll).sort((a,b)=>a.localeCompare(b));
 }
 
 function getQty(snap, store) { return snap?.stores?.[store]?.qty ?? 0; }
@@ -175,7 +177,7 @@ function getValor(snap, store) { return snap?.stores?.[store]?.valor ?? 0; }
 function getPend(snap, store) { return snap?.stores?.[store]?.pending ?? 0; }
 function getMinDias(snap, store) { return snap?.stores?.[store]?.minDias ?? null; }
 
-function arrow(delta, isNew = false) {
+function arrow(delta, isNew=false) {
   if (isNew) return { txt: "↗", cls: "new", title: "Novo" };
   if (delta > 0) return { txt: "↑", cls: "up", title: "Aumentou" };
   if (delta < 0) return { txt: "↓", cls: "down", title: "Diminuiu" };
@@ -183,8 +185,8 @@ function arrow(delta, isNew = false) {
 }
 
 function computeSummary(stores) {
-  const last = state.visible[state.visible.length - 1] || null;
-  const prev = state.visible.length >= 2 ? state.visible[state.visible.length - 2] : null;
+  const last = state.visible[state.visible.length-1] || null;
+  const prev = state.visible.length >= 2 ? state.visible[state.visible.length-2] : null;
 
   let totalValor = 0, zeros = 0;
   for (const st of stores) {
@@ -192,6 +194,7 @@ function computeSummary(stores) {
     if (q === 0) zeros++;
     totalValor += getValor(last, st);
   }
+
   els.lastImport.textContent = last ? formatFull(last.ts) : "—";
   els.snapCount.textContent = String(state.visible.length);
   els.lastValue.textContent = last ? fmtBRL.format(totalValor) : "—";
@@ -202,13 +205,16 @@ function computeSummary(stores) {
 function sortStores(stores, last) {
   const sortMode = els.sortSelect.value;
   const out = [...stores];
-  out.sort((a, b) => {
-    const qa = getQty(last, a), qb = getQty(last, b);
-    const za = qa === 0 ? 1 : 0, zb = qb === 0 ? 1 : 0;
-    if (za !== zb) return za - zb;
-    if (sortMode === "nameAsc") return a.localeCompare(b);
-    if (sortMode === "qtyAsc") { if (qa !== qb) return qa - qb; return a.localeCompare(b); }
-    if (qa !== qb) return qb - qa;
+  out.sort((a,b)=> {
+    const qa=getQty(last,a), qb=getQty(last,b);
+    const za=qa===0?1:0, zb=qb===0?1:0;
+    if (za!==zb) return za-zb; // zeradas no final
+    if (sortMode==="nameAsc") return a.localeCompare(b);
+    if (sortMode==="qtyAsc") {
+      if (qa!==qb) return qa-qb;
+      return a.localeCompare(b);
+    }
+    if (qa!==qb) return qb-qa;
     return a.localeCompare(b);
   });
   return out;
@@ -218,17 +224,17 @@ function applyFilters(stores, last, prev) {
   const q = (els.searchInput.value || "").trim().toLowerCase();
   const filt = els.filterSelect.value;
   let out = stores;
-  if (q) out = out.filter(s => s.toLowerCase().includes(q));
-  if (filt === "nonzero") out = out.filter(s => getQty(last, s) > 0);
-  if (filt === "zero") out = out.filter(s => getQty(last, s) === 0);
-  if (filt === "up" && prev) out = out.filter(s => (getQty(last, s) - getQty(prev, s)) > 0);
-  if (filt === "down" && prev) out = out.filter(s => (getQty(last, s) - getQty(prev, s)) < 0);
+  if (q) out = out.filter(s=> s.toLowerCase().includes(q));
+  if (filt==="nonzero") out = out.filter(s=> getQty(last,s) > 0);
+  if (filt==="zero") out = out.filter(s=> getQty(last,s) === 0);
+  if (filt==="up" && prev) out = out.filter(s=> (getQty(last,s)-getQty(prev,s)) > 0);
+  if (filt==="down" && prev) out = out.filter(s=> (getQty(last,s)-getQty(prev,s)) < 0);
   return out;
 }
 
 function escapeHtml(s) {
-  return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
 
 function renderTable() {
@@ -254,7 +260,7 @@ function renderTable() {
   h1 += "</tr>";
 
   let h2 = "<tr>";
-  for (let i = 0; i < state.visible.length; i++) h2 += "<th class='subHead'>Δ</th><th class='subHead'>Qtd</th>";
+  for (let i=0; i<state.visible.length; i++) h2 += "<th class='subHead'>Δ</th><th class='subHead'>Qtd</th>";
   h2 += "</tr>";
 
   els.thead.innerHTML = h1 + h2;
@@ -264,15 +270,15 @@ function renderTable() {
     let tr = `<tr class="${isZero ? "zeroRow" : ""}">`;
     tr += `<td class="storeCell" data-store="${escapeHtml(store)}">${escapeHtml(store)}</td>`;
 
-    for (let i = 0; i < state.visible.length; i++) {
+    for (let i=0;i<state.visible.length;i++) {
       const snap = state.visible[i];
       const qty = getQty(snap, store);
-      const prevSnap = i > 0 ? state.visible[i - 1] : null;
+      const prevSnap = i>0 ? state.visible[i-1] : null;
       const prevQty = prevSnap ? getQty(prevSnap, store) : 0;
-      const isNew = !!(prevSnap && !(store in (prevSnap.stores || {})) && (store in (snap.stores || {})));
+      const isNew = !!(prevSnap && !(store in (prevSnap.stores||{})) && (store in (snap.stores||{})));
       const del = prevSnap ? (qty - prevQty) : 0;
-      const a = prevSnap ? arrow(del, isNew) : { txt: "•", cls: "same", title: "Primeiro snapshot" };
-      const valCls = qty === 0 ? "zero" : "";
+      const a = prevSnap ? arrow(del, isNew) : { txt:"•", cls:"same", title:"Primeiro snapshot" };
+      const valCls = qty===0 ? "zero" : "";
 
       tr += `<td class="arrowCell"><span class="arrowBox ${a.cls}" title="${a.title}">${a.txt}</span></td>`;
       tr += `<td class="qtyCell"><span class="val ${valCls}">${fmtInt.format(qty)}</span></td>`;
@@ -310,10 +316,7 @@ async function saveSnapshot(storesAgg, productsByStore) {
   const ts = Date.now();
   const label = formatLabel(ts);
 
-  let totalValor = 0;
-  for (const st of Object.keys(storesAgg)) totalValor += (storesAgg[st]?.valor || 0);
-
-  const payload = { ts, label, stores: storesAgg, products: productsByStore, totals: { totalValor } };
+  const payload = { ts, label, stores: storesAgg, products: productsByStore, totals: {} };
   const snapRef = push(ref(db, "snapshots"));
   await set(snapRef, payload);
 }
@@ -322,10 +325,12 @@ async function handleImport(file) {
   showStatus("Importando XLSX…");
   const buf = await file.arrayBuffer();
   const { storesAgg, productsByStore } = parseXLSX(buf);
+
   if (!Object.keys(storesAgg).length) {
     showStatus("Não encontrei linhas válidas. Confira a coluna 'Empresa : Produto'.");
     return;
   }
+
   showStatus("Salvando snapshot no Firebase…");
   await saveSnapshot(storesAgg, productsByStore);
   await reloadAll();
@@ -340,14 +345,15 @@ async function reloadAll() {
   hideStatus();
 }
 
-// store modal
+// ===== Modal Loja =====
 function openStoreModal() {
   els.storeModal.style.display = "block";
   els.storeInput.value = "";
   els.modalHint.textContent = "";
-  setTimeout(() => els.storeInput.focus(), 0);
+  setTimeout(()=>els.storeInput.focus(),0);
 }
 function closeStoreModal() { els.storeModal.style.display = "none"; }
+
 async function saveStoreFromModal() {
   const s = normalize(els.storeInput.value);
   if (!s) { els.modalHint.textContent = "Digite o nome/código da loja."; return; }
@@ -363,12 +369,13 @@ async function saveStoreFromModal() {
   }
 }
 
-// products modal
+// ===== Modal Produtos =====
 function openProductsModal(store) {
-  const last = state.visible[state.visible.length - 1] || null;
+  currentProdStore = store;
+  const last = state.visible[state.visible.length-1] || null;
   if (!last) return;
-  const prods = last.products?.[store] || [];
 
+  const prods = last.products?.[store] || [];
   const totQty = getQty(last, store);
   const totVal = getValor(last, store);
   const totPend = getPend(last, store);
@@ -406,58 +413,125 @@ function openProductsModal(store) {
 }
 function closeProductsModal() { els.prodModal.style.display = "none"; }
 
-// PDF arrows drawn as triangles
+// ===== PDF helpers =====
 function drawArrow(doc, kind, x, y, size) {
   const s = size;
   if (kind === "up") {
-    doc.setFillColor(37, 199, 97);
-    doc.triangle(x, y + s, x + s, y + s, x + s / 2, y, "F");
+    doc.setFillColor(37,199,97);
+    doc.triangle(x, y+s, x+s, y+s, x+s/2, y, "F");
   } else if (kind === "down") {
-    doc.setFillColor(255, 59, 99);
-    doc.triangle(x, y, x + s, y, x + s / 2, y + s, "F");
+    doc.setFillColor(255,59,99);
+    doc.triangle(x, y, x+s, y, x+s/2, y+s, "F");
   } else {
-    doc.setFillColor(255, 176, 46);
-    doc.triangle(x, y, x, y + s, x + s, y + s / 2, "F");
+    doc.setFillColor(255,176,46);
+    doc.triangle(x, y, x, y+s, x+s, y+s/2, "F");
   }
+}
+
+function buildStorePDF(store) {
+  const last = state.visible[state.visible.length-1] || null;
+  if (!last) { alert("Sem dados. Importe um XLSX primeiro."); return; }
+  const prods = last.products?.[store] || [];
+
+  const totQty = getQty(last, store);
+  const totVal = getValor(last, store);
+  const totPend = getPend(last, store);
+  const minDias = getMinDias(last, store);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.addImage(LOGO_BASE64_JPG, "JPEG", 32, 24, 210, 50);
+  doc.setFont("helvetica","bold"); doc.setFontSize(15);
+  doc.text("Embalagens Inativas — Detalhe por Loja", 32, 92);
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(12);
+  doc.text("Loja: " + store, 32, 114);
+
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text("Snapshot: " + (last.label || formatLabel(last.ts)) + " • Importação: " + formatFull(last.ts), 32, 132);
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.text("Estoque:", 32, 156); doc.setFont("helvetica","normal"); doc.text(String(fmtInt.format(totQty)), 92, 156);
+  doc.setFont("helvetica","bold"); doc.text("Pendências:", 170, 156); doc.setFont("helvetica","normal"); doc.text(String(fmtInt.format(totPend)), 250, 156);
+  doc.setFont("helvetica","bold"); doc.text("Valor:", 340, 156); doc.setFont("helvetica","normal"); doc.text(String(fmtBRL.format(totVal)), 388, 156);
+  doc.setFont("helvetica","bold"); doc.text("ent.recente:", 32, 174); doc.setFont("helvetica","normal"); doc.text((minDias===null||minDias===undefined)?"—":String(fmtInt.format(minDias)), 104, 174);
+
+  if (!prods.length) {
+    doc.setFont("helvetica","italic"); doc.setFontSize(10);
+    doc.text("Sem produtos para esta loja no último snapshot.", 32, 210);
+  } else {
+    const head = [["Cód.Sistema ","Produto Descrição","Estoque","Pedido.Pendente","Dias.ult entrada","Valor custo R$ "]];
+    const body = prods.map(p => [
+      p.codigoProduto || "",
+      p.produto || "",
+      fmtInt.format(p.qty || 0),
+      fmtInt.format(p.pending || 0),
+      (p.dias===null||p.dias===undefined) ? "—" : fmtInt.format(p.dias),
+      fmtBRL.format(p.valor || 0),
+    ]);
+
+    doc.autoTable({
+      startY: 200,
+      head,
+      body,
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [25,140,255] },
+      columnStyles: {
+        2: { halign:"right" },
+        3: { halign:"right" },
+        4: { halign:"right" },
+        5: { halign:"right" },
+      },
+      margin: { left: 32, right: 32 },
+      tableWidth: pageW - 64,
+    });
+  }
+
+  const iso = new Date().toISOString().slice(0,10);
+  const safe = String(store).replace(/[^\w\-]+/g, "_");
+  doc.save(`embalagens-inativas_${safe}_${iso}.pdf`);
 }
 
 function buildPDF() {
   if (!state.visible.length) { alert("Sem dados. Importe um XLSX primeiro."); return; }
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const doc = new jsPDF({ orientation:"landscape", unit:"pt", format:"a4" });
   const pageW = doc.internal.pageSize.getWidth();
 
   doc.addImage(LOGO_BASE64_JPG, "JPEG", 28, 18, 220, 52);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.setFont("helvetica","bold"); doc.setFontSize(15);
   doc.text("Embalagens Inativas — Estoque em Unidade (Histórico)", 270, 42);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-  const last = state.visible[state.visible.length - 1];
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  const last = state.visible[state.visible.length-1];
   doc.text("Última importação: " + (last ? formatFull(last.ts) : "—"), 270, 60);
 
   const unionStores = getAllStoresUnion();
-  const lastSnap = state.visible[state.visible.length - 1];
+  const lastSnap = state.visible[state.visible.length-1];
   const storesSorted = sortStores(unionStores, lastSnap);
 
-  const head = [["Empresa", ...state.visible.flatMap(s => [(s.label || formatLabel(s.ts)) + " Δ", (s.label || formatLabel(s.ts)) + " Qtd"])]];
+  const head = [[ "Empresa", ...state.visible.flatMap(s => [ (s.label||formatLabel(s.ts))+" Δ", (s.label||formatLabel(s.ts))+" Qtd" ]) ]];
+
   const arrowKinds = [];
   const body = storesSorted.map(store => {
     const row = [store];
     const kindsRow = [null];
-    for (let i = 0; i < state.visible.length; i++) {
+    for (let i=0;i<state.visible.length;i++) {
       const snap = state.visible[i];
       const qty = getQty(snap, store);
-      const prev = i > 0 ? state.visible[i - 1] : null;
+      const prev = i>0 ? state.visible[i-1] : null;
       const prevQty = prev ? getQty(prev, store) : 0;
-      const isNew = !!(prev && !(store in (prev.stores || {})) && (store in (snap.stores || {})));
+      const isNew = !!(prev && !(store in (prev.stores||{})) && (store in (snap.stores||{})));
 
       let kind = "same";
       if (!prev) kind = "same";
       else {
         const d = qty - prevQty;
         if (isNew) kind = "new";
-        else if (d > 0) kind = "up";
-        else if (d < 0) kind = "down";
+        else if (d>0) kind = "up";
+        else if (d<0) kind = "down";
         else kind = "same";
       }
 
@@ -476,21 +550,21 @@ function buildPDF() {
     headStyles: { fillColor: [25, 140, 255] },
     margin: { left: 28, right: 28 },
     tableWidth: pageW - 56,
-    didDrawCell: function (data) {
+    didDrawCell: function(data) {
       if (data.section !== "body") return;
       const r = data.row.index;
       const c = data.column.index;
       const kind = arrowKinds[r]?.[c] || null;
       if (kind) {
-        const x = data.cell.x + (data.cell.width / 2) - 4.5;
-        const y = data.cell.y + (data.cell.height / 2) - 4.5;
+        const x = data.cell.x + (data.cell.width/2) - 4.5;
+        const y = data.cell.y + (data.cell.height/2) - 4.5;
         drawArrow(doc, kind === "new" ? "same" : kind, x, y, 9);
       }
     }
   });
 
   const totalsRow = ["VALOR CUSTO BRUTO", ...state.visible.flatMap(snap => {
-    let tot = 0;
+    let tot=0;
     for (const st of unionStores) tot += getValor(snap, st);
     return ["", fmtBRL.format(tot)];
   })];
@@ -499,12 +573,12 @@ function buildPDF() {
     startY: doc.lastAutoTable.finalY + 8,
     head: [],
     body: [totalsRow],
-    styles: { fontSize: 8.5, cellPadding: 4, fontStyle: "bold" },
+    styles: { fontSize: 8.5, cellPadding: 4, fontStyle:"bold" },
     margin: { left: 28, right: 28 },
     tableWidth: pageW - 56,
   });
 
-  const iso = new Date().toISOString().slice(0, 10);
+  const iso = new Date().toISOString().slice(0,10);
   doc.save("embalagens-inativas_matriz_" + iso + ".pdf");
 }
 
@@ -539,6 +613,10 @@ function wire() {
 
   els.prodBackdrop.addEventListener("click", closeProductsModal);
   els.btnProdClose.addEventListener("click", closeProductsModal);
+  els.btnProdPDF.addEventListener("click", () => {
+    if (!currentProdStore) { alert("Abra uma loja primeiro."); return; }
+    buildStorePDF(currentProdStore);
+  });
 
   els.tbody.addEventListener("click", (e) => {
     const cell = e.target.closest("td.storeCell");

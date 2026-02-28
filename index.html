@@ -18,7 +18,7 @@
       <img class="brand__logo" src="assets/logo.jpg" alt="DelMORO • DelNorte • Casa Aurora" />
       <div class="brand__meta">
         <div class="brand__title">Embalagens Inativas — Estoque em Unidade</div>
-        <div class="brand__subtitle">Clique na loja para ver os produtos. Setas sempre alinhadas (coluna própria).</div>
+        <div class="brand__subtitle">Clique na loja para ver os produtos.</div>
       </div>
     </div>
 
@@ -127,11 +127,11 @@
           <div class="pill__v" id="prodTotVal">—</div>
         </div>
         <div class="pill pill--small">
-          <div class="pill__k">Pendências (somatório)</div>
+          <div class="pill__k">Pendências (entrada)</div>
           <div class="pill__v" id="prodTotPend">—</div>
         </div>
         <div class="pill pill--small">
-          <div class="pill__k">Últ. entrada (min dias)</div>
+          <div class="pill__k">Últ. entrada (mais próxima)</div>
           <div class="pill__v" id="prodMinDias">—</div>
         </div>
       </div>
@@ -143,9 +143,9 @@
               <th>Cód.</th>
               <th>Produto</th>
               <th class="num">Qtd</th>
-              <th class="num">Pend.</th>
-              <th class="num">Dias</th>
-              <th class="num">Valor</th>
+              <th class="num">pedido.Pend</th>
+              <th class="num">Dias. ult entrada</th>
+              <th class="num">Valor custo</th>
             </tr>
           </thead>
           <tbody id="prodBody"></tbody>
@@ -153,6 +153,7 @@
       </div>
 
       <div class="modal__actions">
+        <button class="btn btn--ghost" id="btnProdPDF">🧾 PDF desta loja</button>
         <button class="btn btn--ghost" id="btnProdClose">Fechar</button>
       </div>
     </div>
