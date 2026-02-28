@@ -1,8 +1,7 @@
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
-import {
-  getDatabase, ref, push, set, get, query, limitToLast
-} from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+import { getDatabase, ref, get, set, push, query, limitToLast } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDEItNdNAlYIL2_Dj4-Sjpvs5rFR9v8Sv0",
@@ -23,463 +22,546 @@ const LOGO_BASE64_JPG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA3ADcAAD/2wBD
 
 const els = {
   fileInput: document.getElementById("fileInput"),
+  btnAddStore: document.getElementById("btnAddStore"),
+  btnReload: document.getElementById("btnReload"),
   btnPDF: document.getElementById("btnPDF"),
-  btnRefresh: document.getElementById("btnRefresh"),
   statusCard: document.getElementById("statusCard"),
   statusText: document.getElementById("statusText"),
-  tbody: document.getElementById("tbody"),
-  kpiValue: document.getElementById("kpiValue"),
-  kpiQty: document.getElementById("kpiQty"),
-  kpiPending: document.getElementById("kpiPending"),
-  kpiUp: document.getElementById("kpiUp"),
-  kpiDown: document.getElementById("kpiDown"),
-  kpiSame: document.getElementById("kpiSame"),
   searchInput: document.getElementById("searchInput"),
+  rangeSelect: document.getElementById("rangeSelect"),
   sortSelect: document.getElementById("sortSelect"),
   filterSelect: document.getElementById("filterSelect"),
-  metaNow: document.getElementById("metaNow"),
-  metaPrev: document.getElementById("metaPrev"),
-  chartValue: document.getElementById("chartValue"),
-  chartQty: document.getElementById("chartQty"),
-  chartTopValue: document.getElementById("chartTopValue"),
-  chartTopUp: document.getElementById("chartTopUp"),
+  thead: document.getElementById("thead"),
+  tbody: document.getElementById("tbody"),
+  tfoot: document.getElementById("tfoot"),
+  lastImport: document.getElementById("lastImport"),
+  snapCount: document.getElementById("snapCount"),
+  lastValue: document.getElementById("lastValue"),
+  lastZero: document.getElementById("lastZero"),
+
+  // store modal
+  storeModal: document.getElementById("storeModal"),
+  storeBackdrop: document.getElementById("storeBackdrop"),
+  storeInput: document.getElementById("storeInput"),
+  btnCancel: document.getElementById("btnCancel"),
+  btnSaveStore: document.getElementById("btnSaveStore"),
+  modalHint: document.getElementById("modalHint"),
+
+  // products modal
+  prodModal: document.getElementById("prodModal"),
+  prodBackdrop: document.getElementById("prodBackdrop"),
+  btnProdClose: document.getElementById("btnProdClose"),
+  prodTitle: document.getElementById("prodTitle"),
+  prodSub: document.getElementById("prodSub"),
+  prodBody: document.getElementById("prodBody"),
+  prodTotQty: document.getElementById("prodTotQty"),
+  prodTotVal: document.getElementById("prodTotVal"),
+  prodTotPend: document.getElementById("prodTotPend"),
+  prodMinDias: document.getElementById("prodMinDias"),
 };
 
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const fmtNum = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
 let state = {
-  now: null,
-  prev: null,
-  merged: [],
-  history: [],
+  stores: [],
+  snapshots: [],
+  visible: [],
 };
 
-let charts = {
-  value: null,
-  qty: null,
-  topValue: null,
-  topUp: null,
-};
-
-function showStatus(msg) {
-  els.statusCard.style.display = "block";
-  els.statusText.textContent = msg;
-}
+function showStatus(msg) { els.statusCard.style.display = "block"; els.statusText.textContent = msg; }
 function hideStatus() { els.statusCard.style.display = "none"; }
-
-function normalizeStr(x) { return String(x ?? "").trim(); }
+function normalize(s) { return String(s ?? "").trim(); }
+function encodeKey(s) { return s.replace(/[.#$\[\]]/g, "_"); }
 
 function toNumber(v) {
   if (v === null || v === undefined || v === "") return 0;
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  const s = String(v).replace(/\./g, "").replace(",", ".").replace(/[^0-9\-\.]/g, "");
+  const s = String(v).replace(/\./g, "").replace(",", ".").replace(/[^0-9\-\.\s]/g, "");
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 }
 
-function isTotalRow(row) {
-  const emp = normalizeStr(row["Empresa"]);
-  return /^TOTAL\b/i.test(emp) || emp === "";
-}
+function formatLabel(ts) { return new Date(ts).toLocaleDateString("pt-BR"); }
+function formatFull(ts) { return new Date(ts).toLocaleString("pt-BR"); }
 
 function parseXLSX(arrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: "array" });
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
+  const ws = wb.Sheets[wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-  return raw
-    .filter(r => !isTotalRow(r))
-    .map(r => {
-      const codigoEmpresa = toNumber(r["Código Empresa"]);
-      const empresa = normalizeStr(r["Empresa"]);
-      return {
-        codigoEmpresa: codigoEmpresa || null,
-        empresa,
-        qty: toNumber(r["Quantidade em Estoque"]),
-        skus: toNumber(r["Itens (SKU)"]),
-        pending: toNumber(r["Qtd. Pend. Ped.Compra"]),
-        diasUltEntrada: toNumber(r["Dias Ult. Entrada"]),
-        valor: toNumber(r["Valor Custo Bruto"]),
-      };
-    })
-    .filter(r => r.empresa);
-}
+  const productsByStore = {};
+  const storesAgg = {};
 
-function mapByEmpresa(rows) {
-  const m = new Map();
-  for (const r of rows) m.set(r.empresa, r);
-  return m;
-}
+  for (const r of raw) {
+    const combo = normalize(r["Empresa : Produto"]);
+    if (!combo || /^TOTAL\b/i.test(combo)) continue;
 
-function arrowFor(delta) {
-  if (delta > 0) return { icon: "⬆️", cls: "badge badge--up", label: "Aumentou" };
-  if (delta < 0) return { icon: "⬇️", cls: "badge badge--down", label: "Diminuiu" };
-  return { icon: "➡️", cls: "badge badge--same", label: "Manteve" };
-}
+    const parts = combo.split(" : ");
+    const store = normalize(parts[0] || "");
+    const product = normalize(parts.slice(1).join(" : ") || "");
+    if (!store) continue;
 
-function mergeWithDelta(nowRows, prevRows) {
-  const prev = mapByEmpresa(prevRows || []);
-  return nowRows.map(r => {
-    const p = prev.get(r.empresa);
-    const prevQty = p ? (p.qty ?? 0) : null;
-    const delta = prevQty === null ? null : (r.qty - prevQty);
-    const trend = delta === null ? { icon: "🆕", cls: "badge", label: "Novo" } : arrowFor(delta);
-    return { ...r, prevQty, delta, trend };
-  });
-}
+    const item = {
+      codigoProduto: normalize(r["Código Produto"]),
+      produto: product,
+      qty: toNumber(r["Quantidade em Estoque"]),
+      skus: toNumber(r["Itens (SKU)"]),
+      pending: toNumber(r["Qtd. Pend. Ped.Compra"]),
+      dias: toNumber(r["Dias Ult. Entrada"]),
+      valor: toNumber(r["Valor Custo Bruto"]),
+    };
 
-function computeKPIs(rows) {
-  const totalValue = rows.reduce((a,r)=>a+(r.valor||0),0);
-  const totalQty = rows.reduce((a,r)=>a+(r.qty||0),0);
-  const totalPending = rows.reduce((a,r)=>a+(r.pending||0),0);
+    if (!productsByStore[store]) productsByStore[store] = [];
+    productsByStore[store].push(item);
 
-  let up=0, down=0, same=0;
-  for (const r of rows) {
-    if (r.delta === null) continue;
-    if (r.delta > 0) up++;
-    else if (r.delta < 0) down++;
-    else same++;
+    if (!storesAgg[store]) storesAgg[store] = { qty: 0, valor: 0, pending: 0, skus: 0, minDias: null };
+    storesAgg[store].qty += item.qty;
+    storesAgg[store].valor += item.valor;
+    storesAgg[store].pending += item.pending;
+    storesAgg[store].skus += item.skus;
+    if (Number.isFinite(item.dias)) {
+      if (storesAgg[store].minDias === null) storesAgg[store].minDias = item.dias;
+      else storesAgg[store].minDias = Math.min(storesAgg[store].minDias, item.dias);
+    }
   }
 
-  els.kpiValue.textContent = fmtBRL.format(totalValue);
-  els.kpiQty.textContent = fmtNum.format(totalQty);
-  els.kpiPending.textContent = fmtInt.format(totalPending);
-  els.kpiUp.textContent = "⬆️ " + up;
-  els.kpiDown.textContent = "⬇️ " + down;
-  els.kpiSame.textContent = "➡️ " + same;
+  for (const st of Object.keys(productsByStore)) {
+    productsByStore[st].sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  }
+  return { storesAgg, productsByStore };
+}
+
+async function loadStores() {
+  const snap = await get(ref(db, "stores"));
+  if (!snap.exists()) { state.stores = []; return; }
+  const v = snap.val();
+  state.stores = Object.keys(v).sort((a, b) => a.localeCompare(b));
+}
+
+async function loadSnapshots() {
+  const q = query(ref(db, "snapshots"), limitToLast(25));
+  const snap = await get(q);
+  if (!snap.exists()) { state.snapshots = []; return; }
+  const items = [];
+  snap.forEach(child => {
+    const v = child.val() || {};
+    items.push({
+      id: child.key,
+      ts: v.ts,
+      label: v.label,
+      stores: v.stores || {},
+      products: v.products || {},
+      totals: v.totals || {},
+    });
+  });
+  items.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  state.snapshots = items;
+}
+
+function buildVisible() {
+  const n = Number(els.rangeSelect.value || 10);
+  state.visible = state.snapshots.slice(-n);
+}
+
+function getAllStoresUnion() {
+  const setAll = new Set(state.stores);
+  for (const s of state.visible) for (const k of Object.keys(s.stores || {})) setAll.add(k);
+  return Array.from(setAll).sort((a, b) => a.localeCompare(b));
+}
+
+function getQty(snap, store) { return snap?.stores?.[store]?.qty ?? 0; }
+function getValor(snap, store) { return snap?.stores?.[store]?.valor ?? 0; }
+function getPend(snap, store) { return snap?.stores?.[store]?.pending ?? 0; }
+function getMinDias(snap, store) { return snap?.stores?.[store]?.minDias ?? null; }
+
+function arrow(delta, isNew = false) {
+  if (isNew) return { txt: "↗", cls: "new", title: "Novo" };
+  if (delta > 0) return { txt: "↑", cls: "up", title: "Aumentou" };
+  if (delta < 0) return { txt: "↓", cls: "down", title: "Diminuiu" };
+  return { txt: "→", cls: "same", title: "Manteve" };
+}
+
+function computeSummary(stores) {
+  const last = state.visible[state.visible.length - 1] || null;
+  const prev = state.visible.length >= 2 ? state.visible[state.visible.length - 2] : null;
+
+  let totalValor = 0, zeros = 0;
+  for (const st of stores) {
+    const q = getQty(last, st);
+    if (q === 0) zeros++;
+    totalValor += getValor(last, st);
+  }
+  els.lastImport.textContent = last ? formatFull(last.ts) : "—";
+  els.snapCount.textContent = String(state.visible.length);
+  els.lastValue.textContent = last ? fmtBRL.format(totalValor) : "—";
+  els.lastZero.textContent = last ? String(zeros) : "—";
+  return { last, prev };
+}
+
+function sortStores(stores, last) {
+  const sortMode = els.sortSelect.value;
+  const out = [...stores];
+  out.sort((a, b) => {
+    const qa = getQty(last, a), qb = getQty(last, b);
+    const za = qa === 0 ? 1 : 0, zb = qb === 0 ? 1 : 0;
+    if (za !== zb) return za - zb;
+    if (sortMode === "nameAsc") return a.localeCompare(b);
+    if (sortMode === "qtyAsc") { if (qa !== qb) return qa - qb; return a.localeCompare(b); }
+    if (qa !== qb) return qb - qa;
+    return a.localeCompare(b);
+  });
+  return out;
+}
+
+function applyFilters(stores, last, prev) {
+  const q = (els.searchInput.value || "").trim().toLowerCase();
+  const filt = els.filterSelect.value;
+  let out = stores;
+  if (q) out = out.filter(s => s.toLowerCase().includes(q));
+  if (filt === "nonzero") out = out.filter(s => getQty(last, s) > 0);
+  if (filt === "zero") out = out.filter(s => getQty(last, s) === 0);
+  if (filt === "up" && prev) out = out.filter(s => (getQty(last, s) - getQty(prev, s)) > 0);
+  if (filt === "down" && prev) out = out.filter(s => (getQty(last, s) - getQty(prev, s)) < 0);
+  return out;
 }
 
 function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+  return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
 
-function renderTable(rows) {
-  if (!rows.length) {
-    els.tbody.innerHTML = '<tr><td colspan="8" class="muted">Nenhum item para exibir.</td></tr>';
+function renderTable() {
+  buildVisible();
+  const unionStores = getAllStoresUnion();
+  const { last, prev } = computeSummary(unionStores);
+
+  if (!state.visible.length) {
+    els.thead.innerHTML = "<tr><th class='storeHead'>Empresa</th></tr>";
+    els.tbody.innerHTML = "<tr><td class='storeCell'>Importe um XLSX para começar.</td></tr>";
+    els.tfoot.innerHTML = "";
     return;
   }
 
-  els.tbody.innerHTML = rows.map(r => {
-    const deltaTxt = r.delta === null ? "—" : fmtNum.format(r.delta);
-    const deltaCls = r.delta === null ? "muted" : (r.delta>0 ? "pill--up" : (r.delta<0 ? "pill--down" : "pill--same"));
-    return `
-      <tr>
-        <td><strong>${escapeHtml(r.empresa)}</strong></td>
-        <td class="num">${fmtNum.format(r.qty)}</td>
-        <td class="num"><span class="pill ${deltaCls}" style="padding:6px 10px">${deltaTxt}</span></td>
-        <td><span class="${r.trend.cls}">${r.trend.icon} ${r.trend.label}</span></td>
-        <td class="num">${fmtInt.format(r.skus)}</td>
-        <td class="num">${fmtInt.format(r.pending)}</td>
-        <td class="num">${fmtInt.format(r.diasUltEntrada)}</td>
-        <td class="num">${fmtBRL.format(r.valor)}</td>
-      </tr>
-    `;
+  const storesFiltered = applyFilters(unionStores, last, prev);
+  const storesSorted = sortStores(storesFiltered, last);
+
+  let h1 = "<tr><th class='storeHead dateHead' rowspan='2'>Empresa</th>";
+  for (const s of state.visible) {
+    const lbl = escapeHtml(s.label || formatLabel(s.ts));
+    h1 += `<th class='dateHead' colspan='2'>${lbl}</th>`;
+  }
+  h1 += "</tr>";
+
+  let h2 = "<tr>";
+  for (let i = 0; i < state.visible.length; i++) h2 += "<th class='subHead'>Δ</th><th class='subHead'>Qtd</th>";
+  h2 += "</tr>";
+
+  els.thead.innerHTML = h1 + h2;
+
+  const body = storesSorted.map(store => {
+    const isZero = getQty(last, store) === 0;
+    let tr = `<tr class="${isZero ? "zeroRow" : ""}">`;
+    tr += `<td class="storeCell" data-store="${escapeHtml(store)}">${escapeHtml(store)}</td>`;
+
+    for (let i = 0; i < state.visible.length; i++) {
+      const snap = state.visible[i];
+      const qty = getQty(snap, store);
+      const prevSnap = i > 0 ? state.visible[i - 1] : null;
+      const prevQty = prevSnap ? getQty(prevSnap, store) : 0;
+      const isNew = !!(prevSnap && !(store in (prevSnap.stores || {})) && (store in (snap.stores || {})));
+      const del = prevSnap ? (qty - prevQty) : 0;
+      const a = prevSnap ? arrow(del, isNew) : { txt: "•", cls: "same", title: "Primeiro snapshot" };
+      const valCls = qty === 0 ? "zero" : "";
+
+      tr += `<td class="arrowCell"><span class="arrowBox ${a.cls}" title="${a.title}">${a.txt}</span></td>`;
+      tr += `<td class="qtyCell"><span class="val ${valCls}">${fmtInt.format(qty)}</span></td>`;
+    }
+    tr += "</tr>";
+    return tr;
   }).join("");
-}
 
-function applyView() {
-  const q = normalizeStr(els.searchInput.value).toLowerCase();
-  const sort = els.sortSelect.value;
-  const filt = els.filterSelect.value;
+  els.tbody.innerHTML = body || "<tr><td class='storeCell'>Nenhuma loja no filtro.</td></tr>";
 
-  let rows = [...state.merged];
-
-  if (q) rows = rows.filter(r => r.empresa.toLowerCase().includes(q));
-
-  if (filt === "up") rows = rows.filter(r => (r.delta ?? 0) > 0);
-  if (filt === "down") rows = rows.filter(r => (r.delta ?? 0) < 0);
-  if (filt === "same") rows = rows.filter(r => (r.delta ?? 0) === 0 && r.delta !== null);
-  if (filt === "pending") rows = rows.filter(r => (r.pending ?? 0) > 0);
-  if (filt === "stale") rows = rows.filter(r => (r.diasUltEntrada ?? 0) >= 30);
-
-  const sorters = {
-    deltaDesc: (a,b) => (b.delta ?? -Infinity) - (a.delta ?? -Infinity),
-    deltaAsc: (a,b) => (a.delta ?? Infinity) - (b.delta ?? Infinity),
-    valueDesc: (a,b) => (b.valor ?? 0) - (a.valor ?? 0),
-    qtyDesc: (a,b) => (b.qty ?? 0) - (a.qty ?? 0),
-    diasDesc: (a,b) => (b.diasUltEntrada ?? 0) - (a.diasUltEntrada ?? 0),
-    nameAsc: (a,b) => a.empresa.localeCompare(b.empresa),
-  };
-  rows.sort(sorters[sort] || sorters.deltaDesc);
-
-  renderTable(rows);
-}
-
-function formatTS(ts) {
-  if (!ts) return "—";
-  try { return new Date(ts).toLocaleString("pt-BR"); }
-  catch { return String(ts); }
-}
-
-function destroyChart(c) { try { c?.destroy(); } catch {} }
-
-function renderCharts(empty=false) {
-  destroyChart(charts.value);
-  destroyChart(charts.qty);
-  destroyChart(charts.topValue);
-  destroyChart(charts.topUp);
-
-  const labels = empty ? [] : state.history.map(h=>h.label);
-  const values = empty ? [] : state.history.map(h=>h.totalValue);
-  const qtys = empty ? [] : state.history.map(h=>h.totalQty);
-
-  charts.value = new Chart(els.chartValue, {
-    type: "line",
-    data: { labels, datasets: [{ label: "Valor parado (R$)", data: values, tension: 0.25 }] },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => fmtBRL.format(ctx.raw || 0) } }
-      },
-      scales: { y: { ticks: { callback: (v)=> fmtBRL.format(v).replace("R$\u00A0","R$ ") } } }
-    }
-  });
-
-  charts.qty = new Chart(els.chartQty, {
-    type: "line",
-    data: { labels, datasets: [{ label: "Estoque total", data: qtys, tension: 0.25 }] },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { ticks: { callback: (v)=> fmtNum.format(v) } } }
-    }
-  });
-
-  const nowRows = empty ? [] : (state.merged || []);
-  const topValue = [...nowRows].sort((a,b)=>(b.valor||0)-(a.valor||0)).slice(0,10);
-  charts.topValue = new Chart(els.chartTopValue, {
-    type: "bar",
-    data: { labels: topValue.map(r=>r.empresa), datasets: [{ label: "Valor parado", data: topValue.map(r=>r.valor||0) }] },
-    options: {
-      responsive:true,
-      plugins: {
-        legend: { display:false },
-        tooltip: { callbacks: { label: (ctx)=> fmtBRL.format(ctx.raw||0) } }
-      },
-      scales: { y: { ticks: { callback: (v)=> fmtBRL.format(v).replace("R$\u00A0","R$ ") } } }
-    }
-  });
-
-  const topUp = [...nowRows].filter(r => (r.delta ?? 0) > 0).sort((a,b)=>(b.delta||0)-(a.delta||0)).slice(0,10);
-  charts.topUp = new Chart(els.chartTopUp, {
-    type: "bar",
-    data: { labels: topUp.map(r=>r.empresa), datasets: [{ label: "Aumento (Δ estoque)", data: topUp.map(r=>r.delta||0) }] },
-    options: {
-      responsive:true,
-      plugins: { legend: { display:false } },
-      scales: { y: { ticks: { callback: (v)=> fmtNum.format(v) } } }
-    }
-  });
-}
-
-function renderEmpty() {
-  els.kpiValue.textContent = "—";
-  els.kpiQty.textContent = "—";
-  els.kpiPending.textContent = "—";
-  els.kpiUp.textContent = "⬆️ 0";
-  els.kpiDown.textContent = "⬇️ 0";
-  els.kpiSame.textContent = "➡️ 0";
-  els.metaNow.textContent = "—";
-  els.metaPrev.textContent = "—";
-  els.tbody.innerHTML = '<tr><td colspan="8" class="muted">Importe um XLSX para começar.</td></tr>';
-  renderCharts(true);
-}
-
-async function loadHistoryForCharts() {
-  const qh = query(ref(db, "snapshots"), limitToLast(30));
-  const snap = await get(qh);
-  const items = [];
-  if (snap.exists()) {
-    snap.forEach(child => {
-      const v = child.val();
-      items.push({ ts: v.ts, rows: v.rows || [] });
-    });
+  let tf = "<tr><td class='storeCell'>VALOR CUSTO BRUTO</td>";
+  for (const snap of state.visible) {
+    let tot = 0;
+    for (const st of unionStores) tot += getValor(snap, st);
+    tf += "<td></td><td class='qtyCell'>" + fmtBRL.format(tot) + "</td>";
   }
-  items.sort((a,b)=> (a.ts||0)-(b.ts||0));
-
-  state.history = items.map(it => {
-    const rows = Array.isArray(it.rows) ? it.rows : [];
-    const totalValue = rows.reduce((a,r)=>a+(r.valor||0),0);
-    const totalQty = rows.reduce((a,r)=>a+(r.qty||0),0);
-    return {
-      ts: it.ts,
-      label: new Date(it.ts).toLocaleDateString("pt-BR"),
-      totalValue,
-      totalQty
-    };
-  });
-
-  renderCharts();
+  tf += "</tr>";
+  els.tfoot.innerHTML = tf;
 }
 
-async function loadLastTwoSnapshots() {
-  showStatus("Lendo snapshots do Firebase…");
-  const q2 = query(ref(db, "snapshots"), limitToLast(2));
-  const snap = await get(q2);
-
-  if (!snap.exists()) {
-    showStatus("Ainda não existe snapshot salvo. Importe um XLSX para começar.");
-    state.now = null; state.prev = null; state.merged = []; state.history = [];
-    renderEmpty();
-    return;
-  }
-
-  const items = [];
-  snap.forEach(child => items.push({ id: child.key, ...child.val() }));
-  items.sort((a,b)=> (a.ts||0)-(b.ts||0));
-
-  state.prev = items.length >= 2 ? items[0] : null;
-  state.now = items[items.length-1];
-
-  els.metaNow.textContent = formatTS(state.now?.ts);
-  els.metaPrev.textContent = formatTS(state.prev?.ts);
-
-  const nowRows = Array.isArray(state.now.rows) ? state.now.rows : [];
-  const prevRows = state.prev && Array.isArray(state.prev.rows) ? state.prev.rows : [];
-  state.merged = mergeWithDelta(nowRows, prevRows);
-
-  computeKPIs(state.merged);
-  applyView();
-  await loadHistoryForCharts();
-
-  hideStatus();
+async function saveStore(storeName) {
+  const s = normalize(storeName);
+  if (!s) throw new Error("Nome da loja vazio.");
+  await set(ref(db, "stores/" + encodeKey(s)), true);
 }
 
-async function saveSnapshotToFirebase(rows) {
+async function saveSnapshot(storesAgg, productsByStore) {
+  const existing = new Set(state.stores);
+  for (const st of Object.keys(storesAgg)) existing.add(st);
+
+  const safeObj = {};
+  for (const st of existing) safeObj[encodeKey(st)] = true;
+  await set(ref(db, "stores"), safeObj);
+
   const ts = Date.now();
-  const summary = {
-    totalValue: rows.reduce((a,r)=>a+(r.valor||0),0),
-    totalQty: rows.reduce((a,r)=>a+(r.qty||0),0),
-    totalPending: rows.reduce((a,r)=>a+(r.pending||0),0),
-    stores: rows.length
-  };
+  const label = formatLabel(ts);
+
+  let totalValor = 0;
+  for (const st of Object.keys(storesAgg)) totalValor += (storesAgg[st]?.valor || 0);
+
+  const payload = { ts, label, stores: storesAgg, products: productsByStore, totals: { totalValor } };
   const snapRef = push(ref(db, "snapshots"));
-  await set(snapRef, { ts, summary, rows });
-  return { id: snapRef.key, ts, summary, rows };
+  await set(snapRef, payload);
 }
 
 async function handleImport(file) {
   showStatus("Importando XLSX…");
   const buf = await file.arrayBuffer();
-  const rows = parseXLSX(buf);
-
-  if (!rows.length) {
-    showStatus("Não encontrei linhas válidas no XLSX. Verifique se as colunas estão corretas.");
+  const { storesAgg, productsByStore } = parseXLSX(buf);
+  if (!Object.keys(storesAgg).length) {
+    showStatus("Não encontrei linhas válidas. Confira a coluna 'Empresa : Produto'.");
     return;
   }
-
   showStatus("Salvando snapshot no Firebase…");
-  await saveSnapshotToFirebase(rows);
-
-  await loadLastTwoSnapshots();
+  await saveSnapshot(storesAgg, productsByStore);
+  await reloadAll();
   hideStatus();
 }
 
-function buildPDF() {
-  const now = state.now;
-  if (!now || !Array.isArray(now.rows) || !now.rows.length) {
-    alert("Sem dados para exportar. Importe um XLSX primeiro.");
-    return;
+async function reloadAll() {
+  showStatus("Carregando do Firebase…");
+  await loadStores();
+  await loadSnapshots();
+  renderTable();
+  hideStatus();
+}
+
+// store modal
+function openStoreModal() {
+  els.storeModal.style.display = "block";
+  els.storeInput.value = "";
+  els.modalHint.textContent = "";
+  setTimeout(() => els.storeInput.focus(), 0);
+}
+function closeStoreModal() { els.storeModal.style.display = "none"; }
+async function saveStoreFromModal() {
+  const s = normalize(els.storeInput.value);
+  if (!s) { els.modalHint.textContent = "Digite o nome/código da loja."; return; }
+  try {
+    els.modalHint.textContent = "Salvando…";
+    await saveStore(s);
+    await reloadAll();
+    els.modalHint.textContent = "Loja adicionada ✅";
+    setTimeout(closeStoreModal, 450);
+  } catch (err) {
+    console.error(err);
+    els.modalHint.textContent = "Erro: " + (err?.code || err?.message || err);
   }
+}
+
+// products modal
+function openProductsModal(store) {
+  const last = state.visible[state.visible.length - 1] || null;
+  if (!last) return;
+  const prods = last.products?.[store] || [];
+
+  const totQty = getQty(last, store);
+  const totVal = getValor(last, store);
+  const totPend = getPend(last, store);
+  const minDias = getMinDias(last, store);
+
+  els.prodTitle.textContent = "Produtos — " + store;
+  els.prodSub.textContent = "Snapshot: " + (last.label || formatLabel(last.ts)) + " • Última importação: " + formatFull(last.ts);
+  els.prodTotQty.textContent = fmtInt.format(totQty);
+  els.prodTotVal.textContent = fmtBRL.format(totVal);
+  els.prodTotPend.textContent = fmtInt.format(totPend);
+  els.prodMinDias.textContent = (minDias === null || minDias === undefined) ? "—" : fmtInt.format(minDias);
+
+  if (!prods.length) {
+    els.prodBody.innerHTML = "<tr><td colspan='6' style='padding:10px;color:rgba(11,26,43,.65)'>Sem produtos para esta loja no último snapshot.</td></tr>";
+  } else {
+    els.prodBody.innerHTML = prods.map(p => {
+      const cod = escapeHtml(p.codigoProduto || "");
+      const nome = escapeHtml(p.produto || "");
+      const qty = fmtInt.format(p.qty || 0);
+      const pend = fmtInt.format(p.pending || 0);
+      const dias = (p.dias === null || p.dias === undefined) ? "—" : fmtInt.format(p.dias);
+      const val = fmtBRL.format(p.valor || 0);
+      return `<tr>
+        <td class="num">${cod}</td>
+        <td>${nome}</td>
+        <td class="num">${qty}</td>
+        <td class="num">${pend}</td>
+        <td class="num">${dias}</td>
+        <td class="num">${val}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  els.prodModal.style.display = "block";
+}
+function closeProductsModal() { els.prodModal.style.display = "none"; }
+
+// PDF arrows drawn as triangles
+function drawArrow(doc, kind, x, y, size) {
+  const s = size;
+  if (kind === "up") {
+    doc.setFillColor(37, 199, 97);
+    doc.triangle(x, y + s, x + s, y + s, x + s / 2, y, "F");
+  } else if (kind === "down") {
+    doc.setFillColor(255, 59, 99);
+    doc.triangle(x, y, x + s, y, x + s / 2, y + s, "F");
+  } else {
+    doc.setFillColor(255, 176, 46);
+    doc.triangle(x, y, x, y + s, x + s, y + s / 2, "F");
+  }
+}
+
+function buildPDF() {
+  if (!state.visible.length) { alert("Sem dados. Importe um XLSX primeiro."); return; }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
 
-  const dtStr = new Date(now.ts).toLocaleString("pt-BR");
-  const prevStr = state.prev?.ts ? new Date(state.prev.ts).toLocaleString("pt-BR") : "—";
+  doc.addImage(LOGO_BASE64_JPG, "JPEG", 28, 18, 220, 52);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.text("Embalagens Inativas — Estoque em Unidade (Histórico)", 270, 42);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+  const last = state.visible[state.visible.length - 1];
+  doc.text("Última importação: " + (last ? formatFull(last.ts) : "—"), 270, 60);
 
-  doc.addImage(LOGO_BASE64_JPG, "JPEG", 28, 22, 160, 50);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("Painel de Embalagens Inativas — Relatório", 210, 48);
+  const unionStores = getAllStoresUnion();
+  const lastSnap = state.visible[state.visible.length - 1];
+  const storesSorted = sortStores(unionStores, lastSnap);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text("Snapshot: " + dtStr + "   |   Anterior: " + prevStr, 210, 68);
+  const head = [["Empresa", ...state.visible.flatMap(s => [(s.label || formatLabel(s.ts)) + " Δ", (s.label || formatLabel(s.ts)) + " Qtd"])]];
+  const arrowKinds = [];
+  const body = storesSorted.map(store => {
+    const row = [store];
+    const kindsRow = [null];
+    for (let i = 0; i < state.visible.length; i++) {
+      const snap = state.visible[i];
+      const qty = getQty(snap, store);
+      const prev = i > 0 ? state.visible[i - 1] : null;
+      const prevQty = prev ? getQty(prev, store) : 0;
+      const isNew = !!(prev && !(store in (prev.stores || {})) && (store in (snap.stores || {})));
 
-  const totalValue = state.merged.reduce((a,r)=>a+(r.valor||0),0);
-  const totalQty = state.merged.reduce((a,r)=>a+(r.qty||0),0);
-  const totalPending = state.merged.reduce((a,r)=>a+(r.pending||0),0);
-  doc.setFont("helvetica","bold");
-  doc.text("Valor parado: " + fmtBRL.format(totalValue) + "   •   Estoque: " + fmtNum.format(totalQty) + "   •   Pendências: " + fmtInt.format(totalPending), 28, 98);
+      let kind = "same";
+      if (!prev) kind = "same";
+      else {
+        const d = qty - prevQty;
+        if (isNew) kind = "new";
+        else if (d > 0) kind = "up";
+        else if (d < 0) kind = "down";
+        else kind = "same";
+      }
 
-  const rows = [...state.merged].sort((a,b)=> (b.valor||0)-(a.valor||0));
-  const body = rows.map(r => {
-    const deltaTxt = r.delta === null ? "—" : fmtNum.format(r.delta);
-    const trend = r.delta === null ? "🆕" : (r.delta > 0 ? "⬆️" : (r.delta < 0 ? "⬇️" : "➡️"));
-    return [
-      r.empresa,
-      fmtNum.format(r.qty),
-      deltaTxt,
-      trend,
-      fmtInt.format(r.skus),
-      fmtInt.format(r.pending),
-      fmtInt.format(r.diasUltEntrada),
-      fmtBRL.format(r.valor),
-    ];
+      row.push(""); kindsRow.push(kind);
+      row.push(fmtInt.format(qty)); kindsRow.push(null);
+    }
+    arrowKinds.push(kindsRow);
+    return row;
   });
 
   doc.autoTable({
-    startY: 112,
-    head: [[ "Loja", "Estoque", "Δ", "Trend", "SKUs", "Pend.", "Dias últ. entrada", "Valor parado" ]],
+    startY: 78,
+    head,
     body,
-    styles: { fontSize: 9, cellPadding: 5 },
-    headStyles: { fillColor: [12, 28, 44] },
-    alternateRowStyles: { fillColor: [245,245,245] },
+    styles: { fontSize: 7.5, cellPadding: 3 },
+    headStyles: { fillColor: [25, 140, 255] },
     margin: { left: 28, right: 28 },
+    tableWidth: pageW - 56,
+    didDrawCell: function (data) {
+      if (data.section !== "body") return;
+      const r = data.row.index;
+      const c = data.column.index;
+      const kind = arrowKinds[r]?.[c] || null;
+      if (kind) {
+        const x = data.cell.x + (data.cell.width / 2) - 4.5;
+        const y = data.cell.y + (data.cell.height / 2) - 4.5;
+        drawArrow(doc, kind === "new" ? "same" : kind, x, y, 9);
+      }
+    }
   });
 
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(9);
-    doc.setTextColor(120);
-    doc.text("Gerado em " + new Date().toLocaleString("pt-BR") + " • Página " + i + "/" + pageCount, 28, doc.internal.pageSize.getHeight() - 18);
-  }
+  const totalsRow = ["VALOR CUSTO BRUTO", ...state.visible.flatMap(snap => {
+    let tot = 0;
+    for (const st of unionStores) tot += getValor(snap, st);
+    return ["", fmtBRL.format(tot)];
+  })];
 
-  const iso = new Date(now.ts).toISOString().slice(0,10);
-  doc.save("painel-embalagens-inativas_" + iso + ".pdf");
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 8,
+    head: [],
+    body: [totalsRow],
+    styles: { fontSize: 8.5, cellPadding: 4, fontStyle: "bold" },
+    margin: { left: 28, right: 28 },
+    tableWidth: pageW - 56,
+  });
+
+  const iso = new Date().toISOString().slice(0, 10);
+  doc.save("embalagens-inativas_matriz_" + iso + ".pdf");
 }
 
-function wireEvents() {
+function wire() {
   els.fileInput.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     handleImport(file).catch(err => {
       console.error(err);
-      showStatus("Erro ao importar/salvar: " + (err?.code || err?.message || err) + " (veja o console F12)");
+      showStatus("Erro ao importar/salvar: " + (err?.code || err?.message || err));
     });
   });
 
-  els.btnRefresh.addEventListener("click", () => {
-    loadLastTwoSnapshots().catch(err => {
+  els.btnReload.addEventListener("click", () => {
+    reloadAll().catch(err => {
       console.error(err);
-      showStatus("Erro ao ler do Firebase: " + (err?.code || err?.message || err) + " (veja o console F12)");
+      showStatus("Erro ao ler do Firebase: " + (err?.code || err?.message || err));
     });
   });
 
   els.btnPDF.addEventListener("click", buildPDF);
 
-  els.searchInput.addEventListener("input", applyView);
-  els.sortSelect.addEventListener("change", applyView);
-  els.filterSelect.addEventListener("change", applyView);
+  els.searchInput.addEventListener("input", renderTable);
+  els.rangeSelect.addEventListener("change", renderTable);
+  els.sortSelect.addEventListener("change", renderTable);
+  els.filterSelect.addEventListener("change", renderTable);
+
+  els.btnAddStore.addEventListener("click", openStoreModal);
+  els.storeBackdrop.addEventListener("click", closeStoreModal);
+  els.btnCancel.addEventListener("click", closeStoreModal);
+  els.btnSaveStore.addEventListener("click", saveStoreFromModal);
+
+  els.prodBackdrop.addEventListener("click", closeProductsModal);
+  els.btnProdClose.addEventListener("click", closeProductsModal);
+
+  els.tbody.addEventListener("click", (e) => {
+    const cell = e.target.closest("td.storeCell");
+    if (!cell) return;
+    const store = cell.getAttribute("data-store") || cell.textContent.trim();
+    if (!store) return;
+    openProductsModal(store);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (els.prodModal.style.display === "block") closeProductsModal();
+      if (els.storeModal.style.display === "block") closeStoreModal();
+    }
+  });
 }
 
 async function boot() {
-  wireEvents();
-  await loadLastTwoSnapshots();
+  wire();
+  await reloadAll();
 }
 
 boot().catch(err => {
   console.error(err);
-  showStatus("Falha ao iniciar: " + (err?.code || err?.message || err) + ". Verifique regras do Firebase / DatabaseURL.");
+  showStatus("Falha ao iniciar: " + (err?.code || err?.message || err));
 });

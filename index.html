@@ -3,22 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Painel • Embalagens Inativas</title>
+  <title>Painel • Embalagens Inativas (Evolução)</title>
   <link rel="icon" href="assets/logo.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg-blur"></div>
+  <div class="bg"></div>
 
   <header class="topbar">
     <div class="brand">
-      <img class="brand__logo" src="assets/logo.jpg" alt="Logos" />
+      <img class="brand__logo" src="assets/logo.jpg" alt="DelMORO • DelNorte • Casa Aurora" />
       <div class="brand__meta">
-        <div class="brand__title">Painel de Embalagens Inativas</div>
-        <div class="brand__subtitle">Acompanhe aumentos/quedas por loja, valor parado e evolução</div>
+        <div class="brand__title">Embalagens Inativas — Estoque em Unidade</div>
+        <div class="brand__subtitle">Clique na loja para ver os produtos. Setas sempre alinhadas (coluna própria).</div>
       </div>
     </div>
 
@@ -27,143 +27,158 @@
         <input id="fileInput" type="file" accept=".xlsx,.xls" hidden />
         📥 Importar XLSX
       </label>
-      <button id="btnRefresh" class="btn btn--ghost" title="Recarregar último snapshot salvo no Firebase">🔄 Recarregar</button>
+
+      <button id="btnAddStore" class="btn btn--ghost" title="Adicionar loja ao cadastro">➕ Adicionar loja</button>
+      <button id="btnReload" class="btn btn--ghost" title="Recarregar do Firebase">🔄 Recarregar</button>
       <button id="btnPDF" class="btn">🧾 Salvar PDF</button>
     </div>
   </header>
 
   <main class="container">
-    <section class="card card--warning" id="statusCard" style="display:none;">
-      <div class="card__title">Status</div>
-      <div class="status" id="statusText">Carregando…</div>
+    <section class="status card" id="statusCard" style="display:none;">
+      <div class="status__label">STATUS</div>
+      <div class="status__text" id="statusText">—</div>
     </section>
 
-    <section class="grid">
-      <div class="card">
-        <div class="card__title">Valor parado (R$)</div>
-        <div class="kpi" id="kpiValue">—</div>
-        <div class="hint" id="kpiValueHint">Somatório do Valor Custo Bruto no último arquivo</div>
+    <section class="summary">
+      <div class="pill">
+        <div class="pill__k">Última importação</div>
+        <div class="pill__v" id="lastImport">—</div>
       </div>
-      <div class="card">
-        <div class="card__title">Estoque total</div>
-        <div class="kpi" id="kpiQty">—</div>
-        <div class="hint" id="kpiQtyHint">Somatório de Quantidade em Estoque</div>
+      <div class="pill">
+        <div class="pill__k">Snapshots carregados</div>
+        <div class="pill__v" id="snapCount">—</div>
       </div>
-      <div class="card">
-        <div class="card__title">Pendências (Ped. Compra)</div>
-        <div class="kpi" id="kpiPending">—</div>
-        <div class="hint">Somatório de Qtd. Pend. Ped.Compra</div>
+      <div class="pill">
+        <div class="pill__k">Valor custo bruto (último)</div>
+        <div class="pill__v" id="lastValue">—</div>
       </div>
-      <div class="card">
-        <div class="card__title">Movimentação (vs snapshot anterior)</div>
-        <div class="kpi kpi--split">
-          <span class="pill pill--up" id="kpiUp">⬆️ 0</span>
-          <span class="pill pill--down" id="kpiDown">⬇️ 0</span>
-          <span class="pill pill--same" id="kpiSame">➡️ 0</span>
-        </div>
-        <div class="hint">Lojas com aumento, queda e estabilidade</div>
+      <div class="pill">
+        <div class="pill__k">Lojas zeradas (último)</div>
+        <div class="pill__v" id="lastZero">—</div>
       </div>
     </section>
 
     <section class="card">
       <div class="toolbar">
-        <div class="toolbar__left">
-          <div class="field">
-            <label>Buscar loja</label>
-            <input id="searchInput" type="text" placeholder="Ex: 001-AFL" />
-          </div>
-          <div class="field">
-            <label>Ordenar por</label>
-            <select id="sortSelect">
-              <option value="deltaDesc">Variação (maior ↑)</option>
-              <option value="deltaAsc">Variação (maior ↓)</option>
-              <option value="valueDesc">Valor parado (maior)</option>
-              <option value="qtyDesc">Estoque (maior)</option>
-              <option value="diasDesc">Dias última entrada (maior)</option>
-              <option value="nameAsc">Loja (A→Z)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Filtro</label>
-            <select id="filterSelect">
-              <option value="all">Todos</option>
-              <option value="up">Só aumentou ⬆️</option>
-              <option value="down">Só diminuiu ⬇️</option>
-              <option value="same">Só manteve ➡️</option>
-              <option value="pending">Com pendência</option>
-              <option value="stale">Sem entrada (>= 30 dias)</option>
-            </select>
-          </div>
+        <div class="field">
+          <label>Buscar loja</label>
+          <input id="searchInput" type="text" placeholder="Ex: 001-AFL" />
         </div>
-
-        <div class="toolbar__right">
-          <div class="meta">
-            <div class="meta__label">Snapshot atual</div>
-            <div class="meta__value" id="metaNow">—</div>
-          </div>
-          <div class="meta">
-            <div class="meta__label">Snapshot anterior</div>
-            <div class="meta__value" id="metaPrev">—</div>
-          </div>
+        <div class="field">
+          <label>Snapshots visíveis</label>
+          <select id="rangeSelect">
+            <option value="6">Últimos 6</option>
+            <option value="10" selected>Últimos 10</option>
+            <option value="15">Últimos 15</option>
+            <option value="25">Últimos 25</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Ordenação (base: último dia)</label>
+          <select id="sortSelect">
+            <option value="qtyDesc" selected>Maior estoque → menor</option>
+            <option value="qtyAsc">Menor → maior (zeradas embaixo)</option>
+            <option value="nameAsc">Loja A→Z</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Filtro</label>
+          <select id="filterSelect">
+            <option value="all" selected>Todas</option>
+            <option value="nonzero">Somente com estoque</option>
+            <option value="zero">Somente zeradas</option>
+            <option value="up">Somente aumentou (último vs anterior)</option>
+            <option value="down">Somente diminuiu (último vs anterior)</option>
+          </select>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="table" id="dataTable">
-          <thead>
-            <tr>
-              <th>Loja</th>
-              <th class="num">Estoque</th>
-              <th class="num">Δ</th>
-              <th>Trend</th>
-              <th class="num">SKUs</th>
-              <th class="num">Pend.</th>
-              <th class="num">Dias últ. entrada</th>
-              <th class="num">Valor parado</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <tr><td colspan="8" class="muted">Carregando…</td></tr>
-          </tbody>
+      <div class="tableWrap">
+        <table class="matrix" id="matrixTable">
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+          <tfoot id="tfoot"></tfoot>
         </table>
       </div>
-      <div class="footnote">
-        Dica: Importe o XLSX atualizado todo dia/semana. O sistema salva no Firebase e compara com o snapshot anterior automaticamente.
-      </div>
-    </section>
 
-    <section class="grid grid--2">
-      <div class="card">
-        <div class="card__title">Evolução do valor parado (R$)</div>
-        <canvas id="chartValue"></canvas>
-        <div class="hint">Últimos snapshots salvos</div>
-      </div>
-      <div class="card">
-        <div class="card__title">Evolução do estoque total</div>
-        <canvas id="chartQty"></canvas>
-        <div class="hint">Últimos snapshots salvos</div>
-      </div>
-    </section>
-
-    <section class="grid grid--2">
-      <div class="card">
-        <div class="card__title">Top 10 lojas por valor parado</div>
-        <canvas id="chartTopValue"></canvas>
-      </div>
-      <div class="card">
-        <div class="card__title">Top 10 lojas por aumento de estoque</div>
-        <canvas id="chartTopUp"></canvas>
+      <div class="note">
+        • Cabeçalho usa a data da importação.<br/>
+        • Loja ausente no XLSX = 0 (verde) e vai para o final.<br/>
+        • Clique em uma loja para ver os produtos (do último snapshot).
       </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div>🔐 Dados salvos no Firebase Realtime Database • Arquivo de exemplo em <span class="mono">assets/Embalagens_inativas_exemplo.xlsx</span></div>
-  </footer>
+  <!-- Modal Produtos -->
+  <div class="modal" id="prodModal" style="display:none;">
+    <div class="modal__backdrop" id="prodBackdrop"></div>
+    <div class="modal__card modal__card--wide">
+      <div class="modal__title" id="prodTitle">Produtos</div>
+      <div class="modal__desc" id="prodSub">—</div>
 
-  <!-- Libs -->
+      <div class="prodGrid">
+        <div class="pill pill--small">
+          <div class="pill__k">Estoque (loja)</div>
+          <div class="pill__v" id="prodTotQty">—</div>
+        </div>
+        <div class="pill pill--small">
+          <div class="pill__k">Valor custo bruto</div>
+          <div class="pill__v" id="prodTotVal">—</div>
+        </div>
+        <div class="pill pill--small">
+          <div class="pill__k">Pendências (somatório)</div>
+          <div class="pill__v" id="prodTotPend">—</div>
+        </div>
+        <div class="pill pill--small">
+          <div class="pill__k">Últ. entrada (min dias)</div>
+          <div class="pill__v" id="prodMinDias">—</div>
+        </div>
+      </div>
+
+      <div class="tableWrap" style="margin-top:10px;">
+        <table class="prodTable">
+          <thead>
+            <tr>
+              <th>Cód.</th>
+              <th>Produto</th>
+              <th class="num">Qtd</th>
+              <th class="num">Pend.</th>
+              <th class="num">Dias</th>
+              <th class="num">Valor</th>
+            </tr>
+          </thead>
+          <tbody id="prodBody"></tbody>
+        </table>
+      </div>
+
+      <div class="modal__actions">
+        <button class="btn btn--ghost" id="btnProdClose">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Add Store -->
+  <div class="modal" id="storeModal" style="display:none;">
+    <div class="modal__backdrop" id="storeBackdrop"></div>
+    <div class="modal__card">
+      <div class="modal__title">Adicionar loja</div>
+      <div class="modal__desc">Adiciona a loja ao cadastro. Se ela não vier no XLSX, ficará zerada.</div>
+      <div class="modal__row">
+        <div class="field" style="min-width:260px;">
+          <label>Código / Nome da loja</label>
+          <input id="storeInput" type="text" placeholder="Ex: 001-AFL" />
+        </div>
+      </div>
+      <div class="modal__actions">
+        <button class="btn btn--ghost" id="btnCancel">Cancelar</button>
+        <button class="btn" id="btnSaveStore">Salvar</button>
+      </div>
+      <div class="modal__hint" id="modalHint"></div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
 
